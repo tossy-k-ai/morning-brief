@@ -1,0 +1,55 @@
+{
+  "date": "2026-05-31",
+
+  "executive_summary": [
+    "市場は金利主導",
+    "ドル円は金利差がテーマ",
+    "原油は中東情勢次第"
+  ],
+
+  "dashboard": {
+    "US10Y": "4.45%",
+    "US2Y": "4.00%",
+    "USDJPY": "159.2",
+    "DXY": "99.1",
+    "WTI": "77.5",
+    "Gold": "3340",
+    "VIX": "15.3",
+    "NikkeiFutures": "+0.7%"
+  },
+
+  "rates": {
+    "headline": "米長期金利は高止まり",
+    "why": "利下げ期待後退",
+    "watch": "4.50%",
+    "risk": "PCE上振れ",
+    "implication": "NASDAQ逆風"
+  },
+
+  "fx": {
+    "headline": "ドル円は円安基調",
+    "why": "日米金利差",
+    "watch": "160円",
+    "risk": "介入",
+    "implication": "輸出株追い風"
+  },
+
+  "commodities": {
+    "headline": "原油は中東情勢を注視",
+    "why": "供給懸念",
+    "watch": "ホルムズ海峡",
+    "risk": "停戦崩壊",
+    "implication": "インフレ再燃"
+  },
+
+  "macro_lesson": {
+    "title": "なぜ金利上昇で株価が下がるのか",
+    "body": "将来利益の割引率が上昇するため現在価値が低下する。"
+  },
+
+  "catalysts": [
+    "米雇用統計",
+    "ISM",
+    "FRB講演"
+  ]
+}

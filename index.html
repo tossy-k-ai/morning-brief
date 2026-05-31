@@ -4,147 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GS Morning Brief</title>
-
-<style>
-:root{
---bg:#0d1117;
---panel:#161b22;
---border:#30363d;
---text:#e6edf3;
---muted:#8b949e;
---accent:#f0b90b;
---green:#3fb950;
---red:#f85149;
---blue:#58a6ff;
-}
-
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-}
-
-body{
-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-background:var(--bg);
-color:var(--text);
-line-height:1.6;
-}
-
-.container{
-max-width:1100px;
-margin:auto;
-padding:20px;
-}
-
-header{
-border-bottom:1px solid var(--border);
-padding-bottom:20px;
-margin-bottom:20px;
-}
-
-h1{
-font-size:2rem;
-font-weight:700;
-}
-
-.date{
-color:var(--muted);
-margin-top:6px;
-}
-
-.summary{
-background:var(--panel);
-padding:20px;
-border-radius:12px;
-margin-bottom:20px;
-border:1px solid var(--border);
-}
-
-.summary h2{
-color:var(--accent);
-margin-bottom:10px;
-}
-
-.grid{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
-gap:16px;
-}
-
-.card{
-background:var(--panel);
-border:1px solid var(--border);
-border-radius:12px;
-padding:18px;
-}
-
-.card h3{
-margin-bottom:10px;
-color:var(--blue);
-}
-
-.metric{
-font-size:1.4rem;
-font-weight:bold;
-margin-bottom:10px;
-}
-
-.watch{
-margin-top:15px;
-padding:12px;
-background:#10151c;
-border-left:4px solid var(--accent);
-}
-
-.watch strong{
-display:block;
-margin-bottom:4px;
-}
-
-.risk{
-margin-top:10px;
-padding:12px;
-background:#1b1212;
-border-left:4px solid var(--red);
-}
-
-.implication{
-margin-top:10px;
-padding:12px;
-background:#0f1a12;
-border-left:4px solid var(--green);
-}
-
-.section-title{
-margin:30px 0 15px;
-font-size:1.5rem;
-border-bottom:1px solid var(--border);
-padding-bottom:8px;
-}
-
-.footer{
-margin-top:30px;
-padding-top:20px;
-border-top:1px solid var(--border);
-font-size:.9rem;
-color:var(--muted);
-}
-
-ul{
-padding-left:20px;
-}
-
-li{
-margin-bottom:6px;
-}
-
-@media(max-width:768px){
-h1{
-font-size:1.6rem;
-}
-}
-</style>
+<link rel="stylesheet" href="assets/style.css">
 </head>
 
 <body>
@@ -153,122 +13,53 @@ font-size:1.6rem;
 
 <header>
 <h1>GS Morning Brief</h1>
-<div class="date">2026-05-31 | Macro / Rates / FX</div>
+<p id="date"></p>
 </header>
 
-<section class="summary">
+<section class="card">
 <h2>Executive Summary</h2>
-
-<ul>
-<li>市場の最大テーマは「インフレ鈍化」と「利下げ期待」の綱引き</li>
-<li>米金利低下ならドル円は円高圧力</li>
-<li>原油価格は中東情勢に依存する展開</li>
-<li>本日の注目は米経済指標とFRB要人発言</li>
-</ul>
+<ul id="summary"></ul>
 </section>
 
-<h2 class="section-title">Overnight</h2>
+<section class="dashboard">
+<h2>Market Dashboard</h2>
 
-<div class="grid">
-
-<div class="card">
-<h3>Rates</h3>
-<div class="metric">US 10Y</div>
-
-<p>
-米長期金利の方向感がグローバル市場を支配。
-株式・為替ともに金利主導の展開。
-</p>
-
-<div class="watch">
-<strong>Watch</strong>
-米10年債利回り
+<div class="dashboard-grid" id="dashboard">
 </div>
+</section>
 
-<div class="risk">
-<strong>Risk</strong>
-インフレ再加速
-</div>
+<section class="card">
+<h2>Rates</h2>
+<div id="rates"></div>
+</section>
 
-<div class="implication">
-<strong>Implication</strong>
-グロース株逆風、ドル高
-</div>
+<section class="card">
+<h2>FX</h2>
+<div id="fx"></div>
+</section>
 
-</div>
+<section class="card">
+<h2>Commodities</h2>
+<div id="commodities"></div>
+</section>
 
-<div class="card">
+<section class="card">
+<h2>Macro Lesson</h2>
+<div id="macro"></div>
+</section>
 
-<h3>FX</h3>
-<div class="metric">USDJPY</div>
+<section class="card">
+<h2>Today's Catalysts</h2>
+<ul id="catalysts"></ul>
+</section>
 
-<p>
-日米金利差が引き続き主要ドライバー。
-日銀発言への感応度も高い。
-</p>
-
-<div class="watch">
-<strong>Watch</strong>
-米金利・日銀コメント
-</div>
-
-<div class="risk">
-<strong>Risk</strong>
-円買い介入観測
-</div>
-
-<div class="implication">
-<strong>Implication</strong>
-輸出株のボラティリティ上昇
-</div>
+<footer>
+Generated Morning Brief
+</footer>
 
 </div>
 
-<div class="card">
-
-<h3>Commodities</h3>
-<div class="metric">Brent / Gold</div>
-
-<p>
-中東情勢とドル指数が主要変数。
-原油はインフレ期待にも直結。
-</p>
-
-<div class="watch">
-<strong>Watch</strong>
-原油在庫・地政学
-</div>
-
-<div class="risk">
-<strong>Risk</strong>
-ホルムズ海峡問題
-</div>
-
-<div class="implication">
-<strong>Implication</strong>
-エネルギー株支援
-</div>
-
-</div>
-
-</div>
-
-<h2 class="section-title">Today's Catalysts</h2>
-
-<div class="card">
-<ul>
-<li>米経済指標</li>
-<li>FRBメンバー講演</li>
-<li>日銀関連ヘッドライン</li>
-<li>中東情勢アップデート</li>
-</ul>
-</div>
-
-<div class="footer">
-GS-style Morning Brief for learning purposes.
-</div>
-
-</div>
+<script src="scripts/render.js"></script>
 
 </body>
 </html>
