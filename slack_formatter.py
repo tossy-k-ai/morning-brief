@@ -12,8 +12,14 @@ GUIDANCE_TEXT = (
 )
 
 
-def build_message_blocks(articles_by_source, date_str, total_count):
-    """記事データをSlack Block Kitのblocks配列に変換する（見出し・リンクのみ、要約なし）。"""
+def build_message_blocks(articles_by_category, category_order, date_str, total_count, term_of_day=None):
+    """記事データをSlack Block Kitのblocks配列に変換する（見出し・リンクのみ、要約なし）。
+
+    articles_by_category: dict[カテゴリ名, list[article]]。articleは
+        title/link/summary(任意)/source(元ソース名)を持つ。
+    category_order: 表示するカテゴリの順序。
+    term_of_day: {"term": str, "definition": str} または None。
+    """
     blocks = [
         {
             "type": "header",
@@ -26,18 +32,31 @@ def build_message_blocks(articles_by_source, date_str, total_count):
         {"type": "divider"},
     ]
 
-    for source_name, articles in articles_by_source.items():
+    for category in category_order:
+        articles = articles_by_category.get(category) or []
         if not articles:
             continue
         blocks.append({
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*{source_name}*"},
+            "text": {"type": "mrkdwn", "text": f"*{category}*"},
         })
         for article in articles:
             text = f"• <{article['link']}|{article['title']}>"
+            if article.get("source"):
+                text += f" ({article['source']})"
             if article.get("summary"):
                 text += f"\n{article['summary']}"
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
+        blocks.append({"type": "divider"})
+
+    if term_of_day:
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*📘 今日覚える経済用語*\n*{term_of_day['term']}*\n{term_of_day['definition']}",
+            },
+        })
         blocks.append({"type": "divider"})
 
     blocks.append({

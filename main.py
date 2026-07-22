@@ -1,6 +1,7 @@
 """毎朝ニュース見出しダイジェスト — 収集〜整形〜配信〜失敗通知。
 
-Claude APIは使用しない。見出しとリンクの配信のみを行う（要約はしない）。
+Claude APIは使用しない。見出しとリンクの配信・固定リストからの経済用語表示のみを
+行う（記事の要約はしない）。
 """
 
 import os
@@ -12,7 +13,7 @@ import feedparser
 import requests
 
 from slack_formatter import build_message_blocks, post_error, post_message_in_chunks
-from sources import SOURCES
+from sources import CATEGORY_ORDER, SOURCES, pick_term_of_day
 
 REQUEST_TIMEOUT = 10
 MAX_ITEMS_PER_SOURCE = 8
@@ -43,13 +44,15 @@ def fetch_source(source):
             "link": link,
             "published": entry.get("published", ""),
             "summary": entry.get("summary", "").strip(),
+            "source": source.name,
         })
     return articles
 
 
 def collect_all():
-    """全ソースを取得し、リンクURL一致で重複除外する。1ソース失敗しても他は継続する。"""
-    articles_by_source = {}
+    """全ソースを取得し、カテゴリごとにグルーピングしてリンクURL一致で重複除外する。
+    1ソース失敗しても他は継続する。"""
+    articles_by_category = {category: [] for category in CATEGORY_ORDER}
     seen_links = set()
     any_success = False
 
@@ -57,15 +60,13 @@ def collect_all():
         items = fetch_source(source)
         if items:
             any_success = True
-        deduped = []
         for item in items:
             if item["link"] in seen_links:
                 continue
             seen_links.add(item["link"])
-            deduped.append(item)
-        articles_by_source[source.name] = deduped
+            articles_by_category.setdefault(source.category, []).append(item)
 
-    return articles_by_source, any_success
+    return articles_by_category, any_success
 
 
 def main():
@@ -74,10 +75,11 @@ def main():
         print("[ERROR] SLACK_WEBHOOK_URL が設定されていません。", file=sys.stderr)
         sys.exit(1)
 
-    date_str = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d (%a)")
+    now = datetime.now(ZoneInfo("Asia/Tokyo"))
+    date_str = now.strftime("%Y-%m-%d (%a)")
 
-    articles_by_source, any_success = collect_all()
-    total = sum(len(v) for v in articles_by_source.values())
+    articles_by_category, any_success = collect_all()
+    total = sum(len(v) for v in articles_by_category.values())
 
     if not any_success:
         message = (
@@ -88,7 +90,9 @@ def main():
         post_error(webhook_url, message)
         sys.exit(1)
 
-    blocks = build_message_blocks(articles_by_source, date_str, total)
+    term_of_day = pick_term_of_day(now.date())
+
+    blocks = build_message_blocks(articles_by_category, CATEGORY_ORDER, date_str, total, term_of_day)
     try:
         post_message_in_chunks(webhook_url, blocks)
     except Exception as exc:
