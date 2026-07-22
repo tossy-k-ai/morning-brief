@@ -11,13 +11,22 @@
       グローバル経済ニュースダイジェストへの全面刷新を依頼され、時事通信/
       ITmediaを置き換えた。各ソースに category を持たせ、main.py側で
       カテゴリ順にグルーピングして配信する。
-      - Reutersは公式RSS配信を終了しているため、Google News RSS検索
-        (news.google.com/rss/search) 経由で代替している。
-      - AP Newsも公式RSSを終了しており、代替は非公式のサードパーティ生成
-        RSSしかない (ToS上のリスクがあるため不採用)。
-      - CNBC/BBC/IMFは直リンク候補として追加。JPX/日本銀行/財務省/OECDは
-        公式のRSS案内ページをDISCOVERY_PAGESに追加し、自動発見で確認する
-        (推測でフィードURLを書かない)。
+  2026-07-22 (4): GitHub Actions run #5 で実際に生存確認・配信確認した
+      (新着47件をSlackへ配信成功)。結果:
+        - Reuters (Google News経由、世界経済/企業ニュースの両クエリ)・
+          BBC News (World/Business)・内閣府・CNBC (Finance) はいずれも
+          [OK]、verified=True に更新した
+        - IMF (rss-list/feed?category=WHATSNEW) はHTTP200だが実際に
+          check_feeds.py・main.py の両方でXMLパースに失敗 ("not well-formed"
+          エラー) したため不採用。IMFの他のRSS URLが見つかれば再検討する
+        - JPX公式RSS案内ページ (jpx.co.jp/rss/) から自動発見で
+          markets_news.xml (マーケットニュース, entries=19) を発見・確認
+          できたため、株式市場カテゴリとして追加した
+        - 日本銀行 (boj.or.jp/rss.htm) は404、財務省の案内ページ2件は
+          ページ取得はできたがRSSリンクが検出できず、OECD
+          (search.oecd.org/rssfeeds/) はDNS解決不可で見つからなかった。
+          いずれも推測でURLを補わず、DISCOVERY_PAGESに残して次回以降の
+          自動発見に委ねる
       本ファイルの verified=False の候補は、check_feeds.py --discover を
       GitHub Actions上で実行して確認してから True に更新すること。
 """
@@ -58,30 +67,25 @@ SOURCES = [
         name="Reuters (Google News経由: 世界経済)",
         url=_GOOGLE_NEWS_REUTERS_WORLD,
         category="世界経済",
-        verified=False,
-        note="Reutersは公式RSSを終了済みのため、Google News RSS検索で代替。"
-        "未検証 — check_feeds.py --discover で確認すること。",
+        verified=True,
+        note="2026-07-22 run #5確認: HTTP200, entries=100, title/link/published/"
+        "summaryあり。Reutersは公式RSSを終了済みのため、Google News RSS検索で代替。",
     ),
     Source(
         name="BBC News (World)",
         url="https://feeds.bbci.co.uk/news/world/rss.xml",
         category="世界経済",
-        verified=False,
-        note="BBC公式RSS。未検証。",
+        verified=True,
+        note="2026-07-22 run #5確認: HTTP200, entries=24, title/link/published/"
+        "summaryあり。BBC公式RSS。",
     ),
     Source(
         name="BBC News (Business)",
         url="https://feeds.bbci.co.uk/news/business/rss.xml",
         category="世界経済",
-        verified=False,
-        note="BBC公式RSS。未検証。",
-    ),
-    Source(
-        name="IMF (What's New)",
-        url="https://www.imf.org/en/rss-list/feed?category=WHATSNEW",
-        category="世界経済",
-        verified=False,
-        note="IMF公式RSS。世界経済見通し等。未検証。",
+        verified=True,
+        note="2026-07-22 run #5確認: HTTP200, entries=50, title/link/published/"
+        "summaryあり。BBC公式RSS。",
     ),
     # --- 日本経済 (日銀・財務省・内閣府) --------------------------------
     Source(
@@ -92,37 +96,62 @@ SOURCES = [
         note="2026-07-22 run #1のdiscover機能で生存確認済み: HTTP200, entries=10,"
         " title/link/publishedあり(summaryなし)。GDP・景気動向等の政府発表。",
     ),
+    # --- 株式市場 (JPX) ---------------------------------------------------
+    Source(
+        name="JPX (マーケットニュース)",
+        url="https://www.jpx.co.jp/rss/markets_news.xml",
+        category="株式市場",
+        verified=True,
+        note="2026-07-22 run #5、jpx.co.jp/rss/ からdiscoverで発見: HTTP200,"
+        " entries=19, title/link/publishedあり(summaryなし)。JPX公式RSS。",
+    ),
     # --- 企業ニュース (Reuters) ------------------------------------------
     Source(
         name="Reuters (Google News経由: 企業ニュース)",
         url=_GOOGLE_NEWS_REUTERS_CORP,
         category="企業ニュース",
-        verified=False,
-        note="Reutersは公式RSSを終了済みのため、Google News RSS検索で代替。"
-        "未検証。",
+        verified=True,
+        note="2026-07-22 run #5確認: HTTP200, entries=100, title/link/published/"
+        "summaryあり。Reutersは公式RSSを終了済みのため、Google News RSS検索で代替。",
     ),
     Source(
         name="CNBC (Finance)",
         url="https://www.cnbc.com/id/10000664/device/rss/rss.html",
         category="企業ニュース",
-        verified=False,
-        note="CNBC公式RSS (Financeカテゴリ)。米国市場・企業ニュース。未検証。",
+        verified=True,
+        note="2026-07-22 run #5確認: HTTP200, entries=30, title/link/published/"
+        "summaryあり。CNBC公式RSS (Financeカテゴリ)。",
     ),
 ]
+
+# IMF (https://www.imf.org/en/rss-list/feed?category=WHATSNEW) はHTTP200を
+# 返すが、check_feeds.py・main.py の双方で実際にXMLパースに失敗した
+# ("not well-formed (invalid token)")。不正なXMLを配信しているため不採用。
+# IMFの他のRSS URLが確認できれば再検討する。
 
 # AP Newsは公式RSS配信を終了しており、代替は非公式のサードパーティRSS生成
 # サービスしか見つからなかった (rss.app等)。ToS上のリスクがあるため不採用。
 # 生存確認が取れる公式RSSが見つかれば追加を検討する。
 
+# JPX discoverでは他に以下も生存確認できたが、内容が「株式市場ニュース」と
+# して不適切なため採用しなかった:
+#   alerts.xml / derivatives-suspended.xml: エントリ0件
+#   equities-suspended.xml: 売買停止銘柄リスト (entries=2、ニュースではない)
+#   site-updates.xml: サイト更新通知 (entries=55、ニュースではない)
+#   jpx-news.xml: 「JPXからのお知らせ」(entries=2、こちらも生存確認済みの候補)
+
 # HTMLから <link type="application/rss+xml"> や .xml/.rdf へのリンクを
 # 自動探索するための起点ページ。check_feeds.py --discover が使用する。
 # (URLそのものではなく「RSSについて」の公式案内ページなので、推測URLではない)
+# 日本銀行(boj.or.jp/rss.htm)は404、財務省の案内ページはRSSリンクを検出
+# できず、OECD(search.oecd.org/rssfeeds/)はDNS解決不可だった。いずれも
+# 推測でフィードURLを補わず、次回以降の自動発見に委ねるためページ自体は
+# 残してある。
 DISCOVERY_PAGES = [
     "https://www.jpx.co.jp/rss/",  # 株式市場: 日本取引所グループ公式RSS案内
-    "https://www.boj.or.jp/rss.htm",  # 日本経済: 日本銀行公式RSS案内
+    "https://www.boj.or.jp/whatsnew/",  # 日本経済: 日本銀行 ニュース一覧 (rss.htmは404だった)
     "https://www.mof.go.jp/about_mof/rss/index.html",  # 日本経済: 財務省公式RSS一覧
     "https://www.mof.go.jp/english/rss.htm",  # 日本経済: 財務省 英語版RSS一覧
-    "https://search.oecd.org/rssfeeds/",  # 世界経済: OECD公式RSS案内
 ]
 
 
