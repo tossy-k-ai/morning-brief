@@ -1,18 +1,16 @@
 """毎朝ニュース見出しダイジェスト — RSSソース定義。
 
-検証結果 (2026-07-22、GitHub Actions workflow_dispatch run #1 で確認済み):
-    - NHK 主要 (www.nhk.or.jp/rss/news/cat0.xml): [OK] 7件
-      リンクは新ドメイン https://news.web.nhk/newsweb/na/... 形式
-    - NHK 経済 (www.nhk.or.jp/rss/news/cat5.xml): [OK] 58件
-    - NHK 主要 (www3.nhk.or.jp/rss/news/cat0.xml): [OK] 7件だが「NHK 主要」と
-      同一記事の別ドメインリンクで、重複配信の原因になったため候補から削除した
-      (リンクURL一致の重複除外をすり抜けてSlackに同じ見出しが2回届いた)。
-    - discover機能で 首相官邸 (kantei.go.jp/index-jnews.rdf)・厚労省・内閣府の
-      RSSも生存確認できたが、本仕様のNHK主要+経済という要件外なので採用していない。
-      gov-online.go.jp/rss/ は403で取得不可だった。
-
-    今後URLが死んだ場合は、推測で書き換えず `python check_feeds.py --discover`
-    で再確認してから更新すること。
+変更履歴:
+  2026-07-22 (1): NHK 主要/経済 のRSSは生存確認できたが (run #1, #2)、ユーザーが
+      実際にリンクを開いたところ本文閲覧に「NHK ONE」への会員登録が必須に
+      なっていることが判明した。見出し+リンク配信という本システムの前提が
+      成立しないため、NHKをSOURCESから外した。
+  2026-07-22 (2): 代替候補として ITmedia (会員登録不要の無料IT/ビジネスニュース、
+      公式RSS利用条件ページで個人利用は無償と明記) を追加。時事通信
+      (jiji.com) もRSS提供の記載はあるが具体的なフィードURLが特定できな
+      かったため、DISCOVERY_PAGES 経由で自動発見して確認する。
+      推測でURLを追加しないこと。必ず check_feeds.py --discover で確認して
+      からこのファイルを更新すること。
 """
 
 from dataclasses import dataclass, field
@@ -26,38 +24,44 @@ class Source:
     note: str = ""
 
 
-# --- 採用ソース (2026-07-22 に check_feeds.py --discover で生存確認済み) ----
+# --- NHKは会員登録が必要になったため不採用 (2026-07-22、ユーザー確認) ---------
+# www.nhk.or.jp/rss/news/cat0.xml / cat5.xml 自体はRSSとして生存しているが、
+# リンク先の記事本文が「NHK ONE」への無料会員登録なしに読めなくなっている。
+# 見出し+リンクを配信するだけの本システムでは実用にならないため使用しない。
+
+# --- 候補ソース (ITmediaは公式RSS一覧に掲載されている直リンク候補。
+#     未検証 — check_feeds.py --discover で確認してから運用すること) --------
 SOURCES = [
     Source(
-        name="NHK 主要",
-        url="https://www.nhk.or.jp/rss/news/cat0.xml",
-        verified=True,
-        note="2026-07-22 確認: HTTP 200, entries=7, title/link/published/summaryあり。",
+        name="ITmedia NEWS (速報)",
+        url="https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml",
+        verified=False,
+        note="ITmedia公式RSS一覧に掲載。RSS利用条件: 私的利用(RSSリーダー等での"
+        "閲覧)は無償、商用利用は要許諾。会員登録なしで記事本文を読める。未検証。",
     ),
     Source(
-        name="NHK 経済",
-        url="https://www.nhk.or.jp/rss/news/cat5.xml",
-        verified=True,
-        note="2026-07-22 確認: HTTP 200, entries=58, title/link/published/summaryあり。",
+        name="ITmedia トップストーリー",
+        url="https://rss.itmedia.co.jp/rss/2.0/topstory.xml",
+        verified=False,
+        note="同上。未検証。",
     ),
 ]
 
-# www3.nhk.or.jp/rss/news/cat0.xml も生存していたが、「NHK 主要」と同一記事を
-# 別ドメインのリンクで配信するだけで、リンクURL一致の重複除外をすり抜けて
-# Slackに同じ見出しが2回届く原因になったため、採用ソースからは外している。
-
-# 時事通信の無料公開RSSは存在が未確認のため候補に含めない (仕様書の指示通り)。
-# 経済ニュースの追加ソースが必要な場合は、DISCOVERY_PAGES を使って
-# 公的機関 (政府広報・各省庁) のRSSを探索し、生存確認できたものだけを
-# SOURCES に追加すること。
+# 時事通信 (jiji.com) はRSS提供している旨の公式ページ
+# (https://www.jiji.com/policy/rss.html) は見つかったが、検索では具体的な
+# フィードURLまで特定できなかった。推測でURLを書かず、DISCOVERY_PAGES経由で
+# 自動発見してから確認すること。時事通信は主要+経済の両方をカバーできる
+# 有力な代替候補。
 
 # HTMLから <link type="application/rss+xml"> や .xml/.rdf へのリンクを
 # 自動探索するための起点ページ。check_feeds.py --discover が使用する。
-# (URLそのものではなく「RSSについて」の案内ページなので、推測URLではない)
+# (URLそのものではなく「RSSについて」の案内ページ・トップページなので、
+# 推測URLではない)
 DISCOVERY_PAGES = [
-    "https://www.nhk.or.jp/news/",
+    "https://www.jiji.com/",
+    "https://www.jiji.com/policy/rss.html",
+    "https://corp.itmedia.co.jp/media/rss_list/",
     "https://www.kantei.go.jp/rss.html",
-    "https://www.gov-online.go.jp/rss/",
     "https://www.mhlw.go.jp/rss/index.html",
     "https://www.cao.go.jp/rss/",
 ]
