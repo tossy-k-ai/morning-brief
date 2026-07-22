@@ -16,7 +16,7 @@ from slack_formatter import build_message_blocks, post_error, post_message_in_ch
 from sources import CATEGORY_ORDER, SOURCES, pick_term_of_day
 
 REQUEST_TIMEOUT = 10
-MAX_ITEMS_PER_SOURCE = 8
+MAX_ITEMS_PER_SOURCE = 5
 USER_AGENT = "morning-brief-digest/1.0 (+https://github.com/tossy-k-ai/morning-brief)"
 
 
