@@ -1,0 +1,5 @@
+.env
+data/*.json
+data/*.md
+logs/*.log
+.claude_work/
