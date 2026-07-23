@@ -1,0 +1,98 @@
+# news-digest 設定ファイル
+#
+# ここに書かれた値だけを変更すれば、ソースの追加・無効化、Obsidian保存先、
+# モデル選択などが変更できる（コードは書き換えなくてよい）。
+
+# --- STEP2 (claude -p 呼び出し) の設定 -------------------------------------
+claude:
+  cli_path: "claude"          # PATHに無い場合はフルパスに変更 (例: "C:/Users/xxx/AppData/Local/Programs/claude/claude.exe")
+  model: "sonnet"              # opusは過剰・高コストなので既定はsonnet
+  max_budget_usd: 2.0          # --max-budget-usd の上限。安全弁 (Proサブスク認証なら通常消費されない想定)
+  timeout_seconds: 600         # subprocess.run の timeout。超過したらSTEP2失敗として扱う
+  permission_mode: "dontAsk"   # 対話確認を出さない (choices: acceptEdits/auto/bypassPermissions/manual/dontAsk/plan)
+
+# --- 記事の鮮度・重複除去 ---------------------------------------------------
+freshness:
+  max_age_hours: 24            # これより古い記事はSTEP1で除外する
+
+dedupe:
+  title_similarity_threshold: 0.85   # difflib.SequenceMatcher でこれ以上似ていれば重複とみなす
+
+# --- STEP1 1ソースあたりの取得件数上限 --------------------------------------
+default_max_items: 10
+
+# --- Obsidian保存設定 --------------------------------------------------------
+obsidian:
+  # 既存の「投資分析」フォルダとは別の専用フォルダにする想定。
+  # 実際のVaultパスに合わせて書き換えること (Windowsパスは / 区切りでも動く)。
+  vault_path: "C:/Users/俊宏/ObsidianVault/News Digest"
+  filename_format: "%Y-%m-%d.md"   # Daily Notes形式のファイル名
+  mode: "append"                     # "append" (既存ファイルに追記) または "overwrite"
+
+# --- Slack配信設定 -----------------------------------------------------------
+slack:
+  webhook_env_var: "SLACK_WEBHOOK_URL"   # .envに設定する環境変数名
+
+# --- RSSソース ---------------------------------------------------------------
+# 2026-07-22時点でのUTF-8のインターネット環境からの生存確認結果を note に記録。
+# 死んだ場合は check_feeds.py で再確認してから修正すること (推測でURLを書き換えない)。
+sources:
+  - name: "Google News (主要)"
+    url: "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja"
+    category: "domestic_intl"
+    enabled: true
+    max_items: 10
+    note: "Google Newsの日本語版トップストーリー。未検証 — check_feeds.pyで確認すること。"
+
+  - name: "Google News (経済)"
+    url: "https://news.google.com/rss/search?q=%E7%B5%8C%E6%B8%88&hl=ja&gl=JP&ceid=JP:ja"
+    category: "economy"
+    enabled: true
+    max_items: 10
+    note: "「経済」の検索結果RSS。未検証。"
+
+  - name: "Google News (ビジネス)"
+    url: "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ja&gl=JP&ceid=JP:ja"
+    category: "economy"
+    enabled: true
+    max_items: 10
+    note: "Google Newsのビジネストピック別RSS。未検証。"
+
+  - name: "Google News (AI)"
+    url: "https://news.google.com/rss/search?q=AI%20OR%20%E4%BA%BA%E5%B7%A5%E7%9F%A5%E8%83%BD&hl=ja&gl=JP&ceid=JP:ja"
+    category: "ai_tech"
+    enabled: true
+    max_items: 10
+    note: "「AI OR 人工知能」の検索結果RSS。未検証。"
+
+  - name: "ITmedia (速報)"
+    url: "https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml"
+    category: "domestic_intl"
+    enabled: true
+    max_items: 10
+    note: "morning-brief実装時 (2026-07-22) に生存確認済み: entries=50。"
+
+  - name: "ITmedia (AI+)"
+    url: "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml"
+    category: "ai_tech"
+    enabled: true
+    max_items: 10
+    note: "morning-brief実装時 (2026-07-22) にdiscover機能で生存確認済み。"
+
+  - name: "ITmedia ビジネスオンライン"
+    url: "https://rss.itmedia.co.jp/rss/2.0/business.xml"
+    category: "economy"
+    enabled: true
+    max_items: 10
+    note: "morning-brief実装時 (2026-07-22) に生存確認済み: entries=20。"
+
+# カテゴリの表示順序・日本語ラベル
+category_labels:
+  domestic_intl: "国内・国際"
+  economy: "経済・企業"
+  ai_tech: "AI・テクノロジー"
+
+category_order:
+  - domestic_intl
+  - economy
+  - ai_tech
