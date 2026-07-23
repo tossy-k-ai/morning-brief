@@ -34,57 +34,65 @@ slack:
   webhook_env_var: "SLACK_WEBHOOK_URL"   # .envに設定する環境変数名
 
 # --- RSSソース ---------------------------------------------------------------
-# 2026-07-22時点でのUTF-8のインターネット環境からの生存確認結果を note に記録。
+# 2026-07-23、GitHub Actions (news-digest-check.yml) で実際に生存確認済み。
 # 死んだ場合は check_feeds.py で再確認してから修正すること (推測でURLを書き換えない)。
+#
+# 注意: Google News系4本は全てRSS自体は生きているが、記事リンク
+# (news.google.com/rss/articles/...) の実記事URLへの自動解決(リダイレクト追跡)は
+# 4本とも失敗した（GoogleのリダイレクトがJS経由のため、requestsでは追跡できない）。
+# 人間がブラウザでクリックする分には問題なく実記事に飛ぶが、Slack/Obsidianに
+# 表示されるURL自体はGoogleの中間URLのままになる。タイトルには
+# 「見出し - 発信元名」の形で発信元が含まれているため、要約時のソース表記には
+# 支障はない。
 sources:
   - name: "Google News (主要)"
     url: "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja"
     category: "domestic_intl"
     enabled: true
     max_items: 10
-    note: "Google Newsの日本語版トップストーリー。未検証 — check_feeds.pyで確認すること。"
+    note: "2026-07-23確認: HTTP200, entries=30。リンク解決は失敗（上記注意参照）。"
 
   - name: "Google News (経済)"
     url: "https://news.google.com/rss/search?q=%E7%B5%8C%E6%B8%88&hl=ja&gl=JP&ceid=JP:ja"
     category: "economy"
     enabled: true
     max_items: 10
-    note: "「経済」の検索結果RSS。未検証。"
+    note: "2026-07-23確認: HTTP200, entries=101。リンク解決は失敗（上記注意参照）。"
 
   - name: "Google News (ビジネス)"
     url: "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ja&gl=JP&ceid=JP:ja"
     category: "economy"
     enabled: true
     max_items: 10
-    note: "Google Newsのビジネストピック別RSS。未検証。"
+    note: "2026-07-23確認: HTTP200, entries=62。リンク解決は失敗（上記注意参照）。"
 
   - name: "Google News (AI)"
     url: "https://news.google.com/rss/search?q=AI%20OR%20%E4%BA%BA%E5%B7%A5%E7%9F%A5%E8%83%BD&hl=ja&gl=JP&ceid=JP:ja"
     category: "ai_tech"
     enabled: true
     max_items: 10
-    note: "「AI OR 人工知能」の検索結果RSS。未検証。"
+    note: "2026-07-23確認: HTTP200, entries=100。リンク解決は失敗（上記注意参照）。"
 
   - name: "ITmedia (速報)"
     url: "https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml"
     category: "domestic_intl"
     enabled: true
     max_items: 10
-    note: "morning-brief実装時 (2026-07-22) に生存確認済み: entries=50。"
+    note: "2026-07-23確認: HTTP200, entries=50。実URLが直接取れる。"
 
   - name: "ITmedia (AI+)"
     url: "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml"
     category: "ai_tech"
     enabled: true
     max_items: 10
-    note: "morning-brief実装時 (2026-07-22) にdiscover機能で生存確認済み。"
+    note: "2026-07-23確認: HTTP200, entries=20。実URLが直接取れる。"
 
   - name: "ITmedia ビジネスオンライン"
     url: "https://rss.itmedia.co.jp/rss/2.0/business.xml"
     category: "economy"
     enabled: true
     max_items: 10
-    note: "morning-brief実装時 (2026-07-22) に生存確認済み: entries=20。"
+    note: "2026-07-23確認: HTTP200, entries=20。実URLが直接取れる。"
 
 # カテゴリの表示順序・日本語ラベル
 category_labels:
