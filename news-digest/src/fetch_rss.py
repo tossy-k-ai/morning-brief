@@ -54,6 +54,7 @@ def fetch_source(source):
             "published_parsed": entry.get("published_parsed"),
             "description": (entry.get("summary", "") or "").strip(),
             "category_hint": source.get("category", ""),
+            "lang": source.get("lang", "ja"),  # "en" の記事はSTEP2で日本語化し、新聞面で(英語記事)と注記する
         })
     return articles
 

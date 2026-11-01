@@ -23,15 +23,20 @@ default_max_items: 10
 
 # --- Obsidian保存設定 --------------------------------------------------------
 obsidian:
-  # 既存の「投資分析」フォルダとは別の専用フォルダにする想定。
-  # 実際のVaultパスに合わせて書き換えること (Windowsパスは / 区切りでも動く)。
-  vault_path: "C:/Users/俊宏/ObsidianVault/News Digest"
+  # wiki Vault の daily フォルダ (2026-10-14 ユーザー指定)。
+  # Windowsパスは / 区切りでも動く。
+  vault_path: "C:/Users/俊宏/Downloads/wiki/daily"
   filename_format: "%Y-%m-%d.md"   # Daily Notes形式のファイル名
   mode: "append"                     # "append" (既存ファイルに追記) または "overwrite"
+  # Slack通知に添える obsidian://open リンク用 (vault名と、vault内での保存フォルダ)
+  vault_name: "wiki"
+  note_folder: "daily"
+  paper_title: "朝刊ダイジェスト"     # 新聞面の先頭に出す紙名
 
 # --- Slack配信設定 -----------------------------------------------------------
 slack:
   webhook_env_var: "SLACK_WEBHOOK_URL"   # .envに設定する環境変数名
+  max_headlines: 8                        # Slackには1面の見出しだけを最大この件数まで流す
 
 # --- RSSソース ---------------------------------------------------------------
 # 2026-07-23、GitHub Actions (news-digest-check.yml) で実際に生存確認済み。
@@ -94,13 +99,96 @@ sources:
     max_items: 10
     note: "2026-07-23確認: HTTP200, entries=20。実URLが直接取れる。"
 
+  # --- 2026-11-01 追加 (check_feeds.check_source で確認済み) --------------------
+  # Google News検索には when:1d を付け、24時間以内の記事が先頭に来るようにしている
+  # (付けないと関連度順になり、先頭 max_items 件が鮮度フィルタでほぼ落ちるため)。
+
+  - name: "Google News (採用・求人)"
+    url: "https://news.google.com/rss/search?q=%E6%8E%A1%E7%94%A8%20OR%20%E6%B1%82%E4%BA%BA%20OR%20%E8%BB%A2%E8%81%B7%20when%3A1d&hl=ja&gl=JP&ceid=JP:ja"
+    category: "recruitment"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=100, 先頭10件中24h以内10件。クエリ: 採用 OR 求人 OR 転職 when:1d"
+
+  - name: "Google News (人材・雇用・人事)"
+    url: "https://news.google.com/rss/search?q=%E4%BA%BA%E6%9D%90%20OR%20%E9%9B%87%E7%94%A8%20OR%20%E4%BA%BA%E4%BA%8B%20when%3A1d&hl=ja&gl=JP&ceid=JP:ja"
+    category: "recruitment"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=74, 先頭10件中24h以内10件。クエリ: 人材 OR 雇用 OR 人事 when:1d"
+
+  - name: "HRzine"
+    url: "https://hrzine.jp/rss/new/20/index.xml"
+    category: "recruitment"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=20。descriptionなし(見出しのみ)。実URLが直接取れる。"
+
+  - name: "Google News (株式市場)"
+    url: "https://news.google.com/rss/search?q=%E6%A0%AA%E5%BC%8F%E5%B8%82%E5%A0%B4%20when%3A1d&hl=ja&gl=JP&ceid=JP:ja"
+    category: "markets"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=100, 先頭10件中24h以内10件。"
+
+  - name: "Google News (為替)"
+    url: "https://news.google.com/rss/search?q=%E5%86%86%E7%9B%B8%E5%A0%B4%20OR%20%E7%82%BA%E6%9B%BF%E7%9B%B8%E5%A0%B4%20when%3A1d&hl=ja&gl=JP&ceid=JP:ja"
+    category: "markets"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=41。クエリ: 円相場 OR 為替相場 when:1d (相場表示ページも混ざるので選定はSTEP2に任せる)"
+
+  - name: "Google News (企業決算)"
+    url: "https://news.google.com/rss/search?q=%E4%BC%81%E6%A5%AD%E6%B1%BA%E7%AE%97%20OR%20%E6%B1%BA%E7%AE%97%E7%99%BA%E8%A1%A8%20when%3A1d&hl=ja&gl=JP&ceid=JP:ja"
+    category: "markets"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=46。クエリ: 企業決算 OR 決算発表 when:1d (単に「決算」だと投信の基準価額ページが多く混ざった)"
+
+  - name: "CNBC (Top News)"
+    url: "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+    category: "markets"
+    lang: "en"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=30。実URLが直接取れる。"
+
+  - name: "CNBC (Markets)"
+    url: "https://www.cnbc.com/id/20910258/device/rss/rss.html"
+    category: "markets"
+    lang: "en"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=30 (日曜のため24h以内0件だったがフィード自体は生存)。"
+
+  - name: "MarketWatch (MarketPulse)"
+    url: "https://feeds.content.dowjones.io/public/rss/mw_marketpulse"
+    category: "markets"
+    lang: "en"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=30。descriptionなし(見出しのみ)。"
+
+  - name: "Google News EN (Reuters markets)"
+    url: "https://news.google.com/rss/search?q=site%3Areuters.com%20markets%20when%3A1d&hl=en-US&gl=US&ceid=US:en"
+    category: "markets"
+    lang: "en"
+    enabled: true
+    max_items: 8
+    note: "2026-11-01確認: HTTP200, entries=100。Reuters公式RSS (feeds.reuters.com) はDNS解決不可で廃止済みのため、その代替。"
+
 # カテゴリの表示順序・日本語ラベル
+# (「今日の1面」は別枠でこれらより前に置く)
 category_labels:
-  domestic_intl: "国内・国際"
+  recruitment: "採用・人材"
+  markets: "投資・マーケット"
   economy: "経済・企業"
   ai_tech: "AI・テクノロジー"
+  domestic_intl: "国内・国際"
 
 category_order:
-  - domestic_intl
+  - recruitment
+  - markets
   - economy
   - ai_tech
+  - domestic_intl

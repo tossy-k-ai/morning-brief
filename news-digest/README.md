@@ -20,19 +20,32 @@ Windowsタスクスケジューラで、あなたのローカルPC上で動か�
    RSS取得 → data/articles.json に書き出す
         ↓
 [STEP 2] src/generate_summary.py
-   claude -p を subprocess で1回だけ呼ぶ
+   claude -p を subprocess で1回だけ呼ぶ（プロンプトは stdin で渡す）
    articles.json + prompts/summarize.md を渡す
-        → data/summary.md を生成
+        → data/summary.json（今日の1面・カテゴリ面の構造化データ）を生成
+          入力に無いURLの記事は破棄し、出典リンクが必ず原文URLになるよう検証する
         ↓
 [STEP 3] src/distribute.py
-   summary.md を読み込み
-   ├→ Slack へ配信
-   └→ Obsidian Vault へ保存
+   summary.json を読み込み
+   ├→ Obsidian Vault へ「新聞面」Markdownを保存（src/newspaper.py で整形。控えを data/summary.md に保存）
+   └→ Slack へ「今日の1面」の見出しだけを通知（obsidian:// リンク付き）
 ```
 
 各STEPは単体で実行・テストできます（`python src/fetch_rss.py` など）。STEP間の受け渡しは
-ファイル（`articles.json` / `summary.md`）で行うため、STEP2やSTEP3が失敗してもSTEP1の
+ファイル（`articles.json` / `summary.json`）で行うため、STEP2やSTEP3が失敗してもSTEP1の
 結果は残り、そこから再実行できます。
+
+### 新聞面の構成（Obsidian: `Downloads/wiki/daily/YYYY-MM-DD.md`）
+
+1. 紙名（`config.yaml` の `obsidian.paper_title`）と日付
+2. **今日の1面**: 最重要3〜5件。見出し＋2〜3文の要約＋出典リンク
+3. カテゴリ面（`category_order` の順）: 採用・人材 → 投資・マーケット → 経済・企業 →
+   AI・テクノロジー → 国内・国際。各最大5件、見出し＋1〜2文の要約＋出典リンク
+4. 今日の言葉（キーワード解説）
+
+英語記事（`lang: "en"` のソース）も見出し・要約は日本語で出力し、出典リンクは原文URL、
+出典名の後ろに「（英語記事）」と付けます。見出し・要約には株価指数の水準・騰落幅の数値を
+書かない方針です（`prompts/summarize.md` に明記。混入した場合はSTEP2のログに `[WARN]` が出ます）。
 
 ---
 
@@ -69,6 +82,22 @@ Google Newsの記事リンク（`news.google.com/rss/articles/...`）を実記�
 - `fetch_rss.py` の `resolve_google_news_link()` は今後Google側の仕様が変わった場合
   に備えて解決ロジックを残してありますが、現時点では実質的に何もしていません
   （常に元のGoogle NewsのURLがそのまま使われます）
+
+### 2026-11-01 追加ソース（ローカルで `check_feeds.check_source` により確認、全て `[OK]`）
+
+| ソース | カテゴリ | 備考 |
+|---|---|---|
+| Google News (採用・求人) | recruitment | `採用 OR 求人 OR 転職 when:1d` |
+| Google News (人材・雇用・人事) | recruitment | `人材 OR 雇用 OR 人事 when:1d` |
+| HRzine | recruitment | descriptionなし（見出しのみ） |
+| Google News (株式市場) | markets | `株式市場 when:1d` |
+| Google News (為替) | markets | `円相場 OR 為替相場 when:1d` |
+| Google News (企業決算) | markets | `企業決算 OR 決算発表 when:1d` |
+| CNBC (Top News) / CNBC (Markets) | markets (英語) | 実URLが直接取れる |
+| MarketWatch (MarketPulse) | markets (英語) | descriptionなし |
+| Google News EN (Reuters markets) | markets (英語) | Reuters公式RSSは廃止済みのため代替 |
+
+既存7ソースも同日に再確認し、全て `[OK]` でした。
 
 再確認したい場合は、Actionsタブから `news-digest RSS check` を `workflow_dispatch`
 （手動実行）するか、以下をローカルで実行してください:
@@ -113,9 +142,10 @@ python check_feeds.py
 
 ### 5. Obsidian Vaultパスの設定
 
-`config.yaml` の `obsidian.vault_path` を、実際のVaultパスに書き換えてください。
-既存の「投資分析」フォルダとは別の、このダイジェスト専用のフォルダを指定する想定です
-（デフォルトは `C:/Users/俊宏/ObsidianVault/News Digest`）。
+`config.yaml` の `obsidian.vault_path` に、ノートを保存するフォルダを指定します
+（現在は wiki Vault の daily フォルダ `C:/Users/俊宏/Downloads/wiki/daily`）。
+Slack通知の `obsidian://open` リンクは `obsidian.vault_name`（`wiki`）と
+`obsidian.note_folder`（`daily`）から組み立てます。保存先を変えたらこの2つも合わせてください。
 
 ### 6. 各STEPを単体でテストする
 
@@ -125,9 +155,14 @@ python src\generate_summary.py
 python src\distribute.py
 ```
 
-`data\articles.json` → `data\summary.md` の順に生成され、`distribute.py` でSlack投稿と
-Obsidian保存が行われます。それぞれ単体で再実行できるので、STEP2がおかしければ
+`data\articles.json` → `data\summary.json` の順に生成され、`distribute.py` でObsidian保存と
+Slack見出し通知が行われます。それぞれ単体で再実行できるので、STEP2がおかしければ
 `data\articles.json` を消さずにプロンプトだけ調整して再実行、といった使い方ができます。
+（`distribute.py` は `summary.json` の日付が本日でなければ中止します。前日分の再配信防止のため）
+
+`run_daily.bat` は **ASCII文字だけで書いてください**。cmd.exe は UTF-8 の多バイト文字を含む
+行を読み違え（バイト位置がずれ、コメントの断片がコマンドとして実行される）、`.env` の
+読み込みループまで壊れることを 2026-11-01 に確認しています。
 
 ### 7. `run_daily.bat` を手動実行して確認する
 
@@ -179,23 +214,18 @@ run_daily.bat
 
 ---
 
-## 🤖 プロンプト設計についての注意（要レビュー）
+## 🤖 プロンプト設計（2026-11-01 改訂）
 
-指示書の「10件の選定」の内訳（今日最重要5件・経済企業3件・AI2件 = 10件）と、
-出力テンプレートの4セクション（今日最重要／国内・国際／経済・企業／AI・テクノロジー）
-の対応関係が、指示書の記述だけでは一意に決まりませんでした（5+3+2=10で
-「国内・国際」に割り当てる件数が明記されていない）。
+`prompts/summarize.md` は、Markdownではなく**JSON**（`front_page` / `sections` / `keyword`）を
+出力させます。整形はプログラム側（`src/newspaper.py`）で行うため、新聞面のレイアウトを
+変えてもプロンプトは変えなくて済みます。カテゴリ一覧は `config.yaml` の
+`category_order` / `category_labels` から自動でプロンプトに差し込まれます。
 
-このプロジェクトでは以下のように解釈して `prompts/summarize.md` を書いています:
+- 今日の1面: 全カテゴリ横断で3〜5件
+- カテゴリ面: 1面以外から各カテゴリ最大5件（水増し禁止、無ければ空）
+- 情報不足の記事は `summary: null` →新聞面では「要約なし（本文未取得のため）」または見出しのみ
 
-- 「今日最重要」= 全カテゴリ横断で最も重要な5件（ジャンル不問）
-- 「経済・企業」「AI・テクノロジー」= 今日最重要に選ばれなかったものの中からそれぞれ
-  3件・2件
-- 「国内・国際」= 上記8件に入らなかったが紹介する価値がある記事があれば追加
-  （水増し禁止なので、無い日は空でよい）
-
-意図と違う場合は `prompts/summarize.md` を書き換えてください（AIプロンプトは
-コードと分離してあるので、ここだけの修正で挙動を変えられます）。
+意図と違う場合は `prompts/summarize.md` を書き換えてください。
 
 ---
 
@@ -248,10 +278,11 @@ news-digest/
 │   ├── fetch_rss.py         # STEP1
 │   ├── generate_summary.py  # STEP2（claude -p 呼び出し）
 │   ├── distribute.py        # STEP3
-│   ├── slack_client.py      # Slack投稿・Markdown→Block Kit変換
+│   ├── newspaper.py         # summary.json → 新聞面Markdown / obsidian:// リンク
+│   ├── slack_client.py      # Slack投稿（1面の見出し通知）
 │   ├── obsidian_writer.py   # Obsidian保存
 │   └── dedupe.py            # 重複除去ロジック
-├── data/                    # articles.json / summary.md (gitignore対象)
+├── data/                    # articles.json / summary.json / summary.md (gitignore対象)
 ├── logs/                    # 実行ログ (gitignore対象)
 ├── check_feeds.py           # RSS生存確認スクリプト
 ├── run_daily.bat            # タスクスケジューラ用

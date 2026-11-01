@@ -1,12 +1,16 @@
 """STEP2: articles.json + prompts/summarize.md を `claude -p` に1回だけ渡し、
-summary.md を生成する。
+summary.json (今日の1面・カテゴリ面の構造化データ) を生成する。
 
 Anthropic APIキーは使用しない。Claude Code の headless モード（`claude -p`）を
 サブプロセスとして呼び出すことでAI処理を行う（Claude Proサブスクリプションの
 認証をそのまま利用する想定）。
+
+Markdownへの整形 (新聞面) とSlack通知の組み立ては STEP3 (distribute.py) が行う。
 """
 
+import html
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -19,31 +23,150 @@ from config_loader import (
     DATA_DIR,
     PROJECT_ROOT,
     PROMPTS_DIR,
-    SUMMARY_MD_PATH,
+    SUMMARY_JSON_PATH,
     load_config,
 )
 
 WORK_DIR = PROJECT_ROOT / ".claude_work"
 
-REQUIRED_HEADINGS = ["# Daily News", "## ⭐ 今日最重要", "## 📖 今日覚える言葉"]
+_TAG_RE = re.compile(r"<[^>]+>")
+_SPACE_RE = re.compile(r"\s+")
+
+# 見出し・要約に株価指数の数値が入っていないかの簡易チェック (警告のみ。除去はしない)
+_INDEX_NUMBER_RE = re.compile(
+    r"(日経平均|日経225|TOPIX|ダウ|NYダウ|S&P\s?500|ナスダック|Nasdaq|Dow)[^。、]{0,12}?[0-9０-９][0-9０-９,，.．]*\s*(円|ドル|ポイント|pt|%|％)"
+)
 
 
-def build_prompt(articles):
+def _plain_description(article):
+    """descriptionのHTML (Google Newsはリンクタグ入り) を平文にし、見出しの繰り返しなら空にする。
+
+    プロンプトを小さくするためだけの整形で、articles.json 自体は変更しない。
+    """
+    text = _SPACE_RE.sub(" ", html.unescape(_TAG_RE.sub(" ", article.get("description", "")))).strip()
+    title = article.get("title", "")
+    if not text or text in title or title.startswith(text):
+        return ""
+    return text
+
+
+def build_prompt(articles, config):
     template = (PROMPTS_DIR / "summarize.md").read_text(encoding="utf-8")
     today_str = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d")
-    articles_json = json.dumps(articles, ensure_ascii=False, indent=2)
+    labels = config.get("category_labels", {})
+    category_lines = "\n".join(
+        f"- `{key}`: {labels.get(key, key)}" for key in config.get("category_order", [])
+    )
+    prompt_articles = [
+        {
+            "title": a["title"],
+            "url": a["url"],
+            "source": a["source"],
+            "published": a.get("published", ""),
+            "description": _plain_description(a),
+            "category_hint": a.get("category_hint", ""),
+            "lang": a.get("lang", "ja"),
+        }
+        for a in articles
+    ]
+    articles_json = json.dumps(prompt_articles, ensure_ascii=False, separators=(",", ":"))
     return (
         f"{template}\n\n"
-        f"本日の日付は {today_str} です。タイトルの `YYYY-MM-DD` はこれに置き換えてください。\n\n"
+        "## カテゴリ一覧（キー: 表示名）\n\n"
+        f"{category_lines}\n\n"
+        f"本日の日付は {today_str} です。\n\n"
         "---\n\n"
         "以下が本日取得した記事一覧（JSON）です。この情報の範囲内でのみ作業してください:\n\n"
         f"```json\n{articles_json}\n```\n"
     )
 
 
-def validate_structure(markdown_text):
-    missing = [h for h in REQUIRED_HEADINGS if h not in markdown_text]
-    return missing
+def parse_digest_json(text):
+    """claude -p の出力からJSONオブジェクトを取り出す (コードフェンスや前後の文が付いていても許容)。"""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("出力にJSONオブジェクトが見つかりません")
+    return json.loads(text[start:end + 1])
+
+
+def _clean_item(item, articles_by_url, warnings, where):
+    """1記事分を検証・正規化する。入力記事に無いURLの記事は捨てる (原文URLの保証)。"""
+    if not isinstance(item, dict):
+        warnings.append(f"{where}: 記事がオブジェクトでないため破棄")
+        return None
+    url = (item.get("url") or "").strip()
+    headline = (item.get("headline") or "").strip()
+    if url not in articles_by_url:
+        warnings.append(f"{where}: 入力に無いURLのため破棄: {headline} ({url})")
+        return None
+    if not headline:
+        warnings.append(f"{where}: 見出しが空のため破棄: {url}")
+        return None
+    summary = item.get("summary")
+    summary = summary.strip() if isinstance(summary, str) and summary.strip() else None
+    source_article = articles_by_url[url]
+    for text in (headline, summary or ""):
+        if _INDEX_NUMBER_RE.search(text):
+            warnings.append(f"{where}: 株価指数の数値らしき表記があります: {text}")
+    return {
+        "headline": headline,
+        "summary": summary,
+        "source": (item.get("source") or "").strip() or source_article["source"],
+        "url": url,
+        "lang": source_article.get("lang", "ja"),
+        "category": item.get("category"),
+    }
+
+
+def validate_digest(raw, articles, config):
+    """構造を検証し、配信に使える形に正規化する。致命的な不備は ValueError。"""
+    if not isinstance(raw, dict):
+        raise ValueError("トップレベルがJSONオブジェクトではありません")
+
+    articles_by_url = {a["url"]: a for a in articles}
+    category_order = config.get("category_order", [])
+    warnings = []
+
+    front_page = []
+    used_urls = set()
+    for i, item in enumerate(raw.get("front_page") or []):
+        cleaned = _clean_item(item, articles_by_url, warnings, f"1面[{i}]")
+        if cleaned and cleaned["url"] not in used_urls:
+            used_urls.add(cleaned["url"])
+            front_page.append(cleaned)
+    if not front_page:
+        raise ValueError("今日の1面 (front_page) に有効な記事が1件もありません")
+
+    raw_sections = raw.get("sections") or {}
+    if not isinstance(raw_sections, dict):
+        raise ValueError("sections がオブジェクトではありません")
+    unknown = set(raw_sections) - set(category_order)
+    if unknown:
+        warnings.append(f"未知のカテゴリキーを無視: {sorted(unknown)}")
+
+    sections = {}
+    for key in category_order:
+        items = []
+        for i, item in enumerate(raw_sections.get(key) or []):
+            cleaned = _clean_item(item, articles_by_url, warnings, f"{key}[{i}]")
+            if cleaned and cleaned["url"] not in used_urls:  # 1面との重複・面同士の重複は載せない
+                used_urls.add(cleaned["url"])
+                cleaned["category"] = key
+                items.append(cleaned)
+        sections[key] = items
+
+    keyword = raw.get("keyword")
+    if not (isinstance(keyword, dict) and keyword.get("term") and keyword.get("explanation")):
+        keyword = None
+
+    digest = {
+        "date": datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d"),
+        "front_page": front_page,
+        "sections": sections,
+        "keyword": keyword,
+    }
+    return digest, warnings
 
 
 def run_claude(prompt_text, claude_config):
@@ -55,9 +178,12 @@ def run_claude(prompt_text, claude_config):
 
     WORK_DIR.mkdir(parents=True, exist_ok=True)
 
+    # プロンプト本文はコマンドライン引数ではなく stdin で渡す
+    # (Windowsはコマンドライン長が約32,000文字に制限されており、記事JSONを引数に入れると
+    #  WinError 206 で起動自体に失敗するため)。
     cmd = [
         cli_path,
-        "-p", prompt_text,
+        "-p",
         "--model", claude_config.get("model", "sonnet"),
         "--output-format", "json",
         "--tools", "",  # ツール一切不要（テキスト生成のみ）→ 権限確認ダイアログが原理的に発生しない
@@ -70,6 +196,7 @@ def run_claude(prompt_text, claude_config):
     try:
         result = subprocess.run(
             cmd,
+            input=prompt_text,
             cwd=WORK_DIR,  # 既存プロジェクトと分離した専用ディレクトリで実行 (CLAUDE.md等を読ませない)
             capture_output=True,
             text=True,
@@ -114,31 +241,42 @@ def main():
         articles = json.load(f)
 
     if not articles:
-        print("[WARN] articles.json が空です。要約対象がないため summary.md は生成しません。", file=sys.stderr)
+        print("[WARN] articles.json が空です。要約対象がないため summary.json は生成しません。", file=sys.stderr)
         sys.exit(1)
 
-    prompt_text = build_prompt(articles)
+    prompt_text = build_prompt(articles, config)
 
     try:
-        markdown_text = run_claude(prompt_text, config.get("claude", {}))
+        output_text = run_claude(prompt_text, config.get("claude", {}))
     except RuntimeError as exc:
         print(f"[ERROR] STEP2 (claude -p 呼び出し) に失敗しました: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    missing = validate_structure(markdown_text)
-    if missing:
+    try:
+        digest, warnings = validate_digest(parse_digest_json(output_text), articles, config)
+    except ValueError as exc:  # json.JSONDecodeError も ValueError のサブクラス
+        WORK_DIR.mkdir(parents=True, exist_ok=True)
+        (WORK_DIR / "last_invalid_output.txt").write_text(output_text, encoding="utf-8")
         print(
-            f"[ERROR] 生成されたMarkdownの構造が不正です（欠けている見出し: {missing}）。"
-            " 壊れたファイルを配信しないため summary.md は書き込みません。",
+            f"[ERROR] 生成された出力の構造が不正です: {exc}。"
+            " 壊れたデータを配信しないため summary.json は書き込みません。"
+            f" (出力は {WORK_DIR / 'last_invalid_output.txt'} に保存)",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(SUMMARY_MD_PATH, "w", encoding="utf-8") as f:
-        f.write(markdown_text)
+    for warning in warnings:
+        print(f"[WARN] {warning}", file=sys.stderr)
 
-    print(f"[INFO] {len(articles)}件の記事から summary.md を生成しました。")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(SUMMARY_JSON_PATH, "w", encoding="utf-8") as f:
+        json.dump(digest, f, ensure_ascii=False, indent=2)
+
+    section_counts = ", ".join(f"{k}={len(v)}" for k, v in digest["sections"].items())
+    print(
+        f"[INFO] {len(articles)}件の記事から summary.json を生成しました "
+        f"(1面={len(digest['front_page'])}, {section_counts})。"
+    )
 
 
 if __name__ == "__main__":

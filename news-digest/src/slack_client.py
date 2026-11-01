@@ -1,75 +1,43 @@
-"""Slack投稿: summary.md (Markdown) をSlack Block Kitに変換してWebhook投稿する。
+"""Slack投稿: 今日の1面の見出し一覧を短い通知としてWebhook投稿する。
 
+全文はObsidianのdailyノート (新聞面) に置き、Slackには見出しだけを流す。
 Webhook投稿・50ブロック分割・エラー通知のロジックは
 ../morning-brief (main.py / slack_formatter.py) で実績のあるものを流用している。
 このプロジェクト単体で動くよう、依存を持ち込まず自己完結させてある。
 """
 
 import json
-import re
 import urllib.error
 import urllib.request
 
 MAX_BLOCKS_PER_MESSAGE = 50
-MAX_SECTION_TEXT_CHARS = 2900  # Slackのsection text上限3000文字に対する安全マージン
 REQUEST_TIMEOUT = 15
 
-_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
-_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+
+def _escape_mrkdwn(text):
+    """Slack mrkdwn の制御文字 (&, <, >) をエスケープする。"""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _convert_inline_markdown(line):
-    """Markdownのインライン記法をSlack mrkdwnに変換する（太字・リンク）。"""
-    line = _LINK_RE.sub(r"<\2|\1>", line)
-    line = _BOLD_RE.sub(r"*\1*", line)
-    return line
-
-
-def _flush_section(buffer_lines, blocks):
-    text = "\n".join(buffer_lines).strip()
-    if not text:
-        return
-    for i in range(0, len(text), MAX_SECTION_TEXT_CHARS):
-        chunk_text = text[i:i + MAX_SECTION_TEXT_CHARS]
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": chunk_text}})
-
-
-def markdown_to_slack_blocks(markdown_text):
-    """summary.md のMarkdownをSlack Block Kitのblocks配列に変換する。
-
-    見出し構造 (# / ## / ### )・区切り線 (---) を前提にパースする。
-    prompts/summarize.md で指定しているテンプレート構造に対応。
-    """
-    blocks = []
-    buffer_lines = []
-
-    for raw_line in markdown_text.splitlines():
-        line = raw_line.rstrip()
-
-        if line.startswith("# "):
-            _flush_section(buffer_lines, blocks)
-            buffer_lines = []
-            blocks.append({
-                "type": "header",
-                "text": {"type": "plain_text", "text": line[2:].strip(), "emoji": True},
-            })
-        elif line.startswith("## ") or line.startswith("### "):
-            _flush_section(buffer_lines, blocks)
-            buffer_lines = []
-            heading_text = line.lstrip("#").strip()
-            blocks.append({
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": f"*{_convert_inline_markdown(heading_text)}*"},
-            })
-        elif line.strip() == "---":
-            _flush_section(buffer_lines, blocks)
-            buffer_lines = []
-            blocks.append({"type": "divider"})
-        else:
-            buffer_lines.append(_convert_inline_markdown(line))
-
-    _flush_section(buffer_lines, blocks)
-    return blocks
+def build_headline_blocks(digest, max_headlines=8, obsidian_uri=None, note_label=None):
+    """日付 + 1面の見出し一覧 + Obsidianへの案内 のブロックを作る。"""
+    headlines = "\n".join(
+        f"• <{item['url']}|{_escape_mrkdwn(item['headline'])}>"
+        for item in digest["front_page"][:max_headlines]
+    )
+    guide = "全文はObsidianのdailyノートへ"
+    if note_label:
+        guide += f"（{_escape_mrkdwn(note_label)}）"
+    if obsidian_uri:
+        guide += f"\n<{obsidian_uri}|Obsidianで開く>"
+    return [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"🗞 今日の1面 {digest['date']}", "emoji": True},
+        },
+        {"type": "section", "text": {"type": "mrkdwn", "text": headlines}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": guide}]},
+    ]
 
 
 def chunk_blocks(blocks, max_blocks=MAX_BLOCKS_PER_MESSAGE):
