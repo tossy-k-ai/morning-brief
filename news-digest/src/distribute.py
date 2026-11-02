@@ -1,20 +1,38 @@
-"""STEP3: summary.json を読み込み、Obsidianへ新聞面を保存し、Slackへ1面の見出しを通知する。
+"""STEP3: summary.json を読み込み、Obsidianへ新聞面を保存し、Slackへ全文形式で配信する。
 
 どちらかが失敗しても、もう片方は独立して試みる（ベストエフォート）。
+
+オプション:
+  --slack-only  Slack配信だけを行う (Obsidianノート・data/summary.md は書き換えない)。配信の再実行用。
+  --dry-run     Slackへは投稿せず、整形後の本文と通数・文字数を表示する。Obsidianにも書かない。
 """
 
+import argparse
 import json
 import os
 import sys
 from datetime import date
 
-from config_loader import DATA_DIR, SUMMARY_JSON_PATH, SUMMARY_MD_PATH, load_config
+from config_loader import DATA_DIR, SUMMARY_JSON_PATH, SUMMARY_MD_PATH, load_config, load_dotenv
 from newspaper import note_path, obsidian_uri, render_newspaper
 from obsidian_writer import write_daily_note
-from slack_client import build_headline_blocks, post_error, post_message_in_chunks
+from slack_client import blocks_to_text, build_full_messages, post_error, post_messages
 
 
-def distribute_to_slack(digest, config, today):
+def build_slack_messages(digest, config, today, obsidian_saved=True):
+    messages, masked = build_full_messages(
+        digest,
+        config,
+        obsidian_uri=obsidian_uri(config, today),
+        note_label=note_path(config, today),
+        obsidian_saved=obsidian_saved,
+    )
+    for where in masked:
+        print(f"[WARN] Slack本文の株価指数の数値を伏せました: {where}", file=sys.stderr)
+    return messages
+
+
+def distribute_to_slack(digest, config, today, obsidian_saved=True):
     slack_config = config.get("slack", {})
     webhook_env_var = slack_config.get("webhook_env_var", "SLACK_WEBHOOK_URL")
     webhook_url = os.environ.get(webhook_env_var)
@@ -23,14 +41,9 @@ def distribute_to_slack(digest, config, today):
         return False, None
 
     try:
-        blocks = build_headline_blocks(
-            digest,
-            max_headlines=slack_config.get("max_headlines", 8),
-            obsidian_uri=obsidian_uri(config, today),
-            note_label=note_path(config, today),
-        )
-        post_message_in_chunks(webhook_url, blocks, text_fallback=f"今日の1面 {digest['date']}")
-        print("[INFO] Slackへの見出し通知に成功しました。")
+        messages = build_slack_messages(digest, config, today, obsidian_saved)
+        total = post_messages(webhook_url, messages, text_fallback=f"朝刊ダイジェスト {digest['date']}")
+        print(f"[INFO] Slackへの全文配信に成功しました（{total}通で投稿）。")
         return True, webhook_url
     except Exception as exc:
         print(f"[ERROR] Slackへの配信に失敗しました: {exc}", file=sys.stderr)
@@ -59,7 +72,22 @@ def distribute_to_obsidian(markdown_text, config, today):
         return False
 
 
+def dry_run(digest, config, today):
+    messages = build_slack_messages(digest, config, today)
+    for number, blocks in enumerate(messages, start=1):
+        text = blocks_to_text(blocks)
+        print(f"===== Slack {number}/{len(messages)} 通目 ({len(blocks)}ブロック, {len(text)}文字) =====")
+        print(text)
+    print(f"[INFO] dry-run: {len(messages)}通で投稿する想定です（投稿はしていません）。")
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--slack-only", action="store_true", help="Slack配信だけを行う (Obsidianは書き換えない)")
+    parser.add_argument("--dry-run", action="store_true", help="投稿せずにSlack本文を表示する")
+    args = parser.parse_args()
+
+    load_dotenv()
     config = load_config()
     today = date.today()
 
@@ -79,12 +107,24 @@ def main():
         )
         sys.exit(1)
 
+    if args.dry_run:
+        dry_run(digest, config, today)
+        return
+
+    if args.slack_only:
+        slack_ok, webhook_url = distribute_to_slack(digest, config, today)
+        if not slack_ok:
+            if webhook_url:
+                post_error(webhook_url, "news-digestのSlack配信 (再実行) に失敗しました")
+            sys.exit(1)
+        return
+
     markdown_text = render_newspaper(digest, config)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     SUMMARY_MD_PATH.write_text(markdown_text, encoding="utf-8")  # 確認用の控え
 
     obsidian_ok = distribute_to_obsidian(markdown_text, config, today)
-    slack_ok, webhook_url = distribute_to_slack(digest, config, today)
+    slack_ok, webhook_url = distribute_to_slack(digest, config, today, obsidian_saved=obsidian_ok)
 
     if not slack_ok or not obsidian_ok:
         failed = []
@@ -98,7 +138,7 @@ def main():
         print(f"[ERROR] {message}", file=sys.stderr)
         sys.exit(1)
 
-    print("[INFO] Obsidian保存・Slack見出し通知の両方に成功しました。")
+    print("[INFO] Obsidian保存・Slack全文配信の両方に成功しました。")
 
 
 if __name__ == "__main__":

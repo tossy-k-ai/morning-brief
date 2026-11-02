@@ -28,7 +28,11 @@ Windowsタスクスケジューラで、あなたのローカルPC上で動か�
 [STEP 3] src/distribute.py
    summary.json を読み込み
    ├→ Obsidian Vault へ「新聞面」Markdownを保存（src/newspaper.py で整形。控えを data/summary.md に保存）
-   └→ Slack へ「今日の1面」の見出しだけを通知（obsidian:// リンク付き）
+   └→ Slack へ全文形式で配信（src/slack_client.py で整形。obsidian:// リンク付き）
+        先頭に日付と「今日の要点」(1面の上位見出しから機械的に作る1行)、続いて
+        *今日の1面* → *採用・人材* → … の太字見出しと「<URL|見出し>（出典）＋次の行に1行要約」の箇条書き。
+        1通 (50ブロック/12,000字) に収まらない日はカテゴリ単位で複数通に分割し、通数をログに出す。
+        株価指数の数値は Slack 本文では「（数値略）」に伏せる (src/index_numbers.py)。
 ```
 
 各STEPは単体で実行・テストできます（`python src/fetch_rss.py` など）。STEP間の受け渡しは
@@ -156,7 +160,9 @@ python src\distribute.py
 ```
 
 `data\articles.json` → `data\summary.json` の順に生成され、`distribute.py` でObsidian保存と
-Slack見出し通知が行われます。それぞれ単体で再実行できるので、STEP2がおかしければ
+Slack全文配信が行われます。`distribute.py --dry-run` は投稿せずにSlack本文と通数を表示し、
+`distribute.py --slack-only` はObsidianノートを書き換えずにSlack配信だけを再実行します
+（単体実行時は `.env` を自分で読み込みます）。それぞれ単体で再実行できるので、STEP2がおかしければ
 `data\articles.json` を消さずにプロンプトだけ調整して再実行、といった使い方ができます。
 （`distribute.py` は `summary.json` の日付が本日でなければ中止します。前日分の再配信防止のため）
 
@@ -279,7 +285,8 @@ news-digest/
 │   ├── generate_summary.py  # STEP2（claude -p 呼び出し）
 │   ├── distribute.py        # STEP3
 │   ├── newspaper.py         # summary.json → 新聞面Markdown / obsidian:// リンク
-│   ├── slack_client.py      # Slack投稿（1面の見出し通知）
+│   ├── slack_client.py      # Slack投稿（全文形式・カテゴリ単位の分割）
+│   ├── index_numbers.py     # 株価指数の数値の検出・伏せ字（STEP2の警告とSlack本文で共用）
 │   ├── obsidian_writer.py   # Obsidian保存
 │   └── dedupe.py            # 重複除去ロジック
 ├── data/                    # articles.json / summary.json / summary.md (gitignore対象)

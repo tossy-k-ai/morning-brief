@@ -26,16 +26,13 @@ from config_loader import (
     SUMMARY_JSON_PATH,
     load_config,
 )
+# 見出し・要約に株価指数の数値が入っていないかの簡易チェック (ここでは警告のみ。Slack本文ではSTEP3で伏せる)
+from index_numbers import INDEX_NUMBER_RE as _INDEX_NUMBER_RE
 
 WORK_DIR = PROJECT_ROOT / ".claude_work"
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPACE_RE = re.compile(r"\s+")
-
-# 見出し・要約に株価指数の数値が入っていないかの簡易チェック (警告のみ。除去はしない)
-_INDEX_NUMBER_RE = re.compile(
-    r"(日経平均|日経225|TOPIX|ダウ|NYダウ|S&P\s?500|ナスダック|Nasdaq|Dow)[^。、]{0,12}?[0-9０-９][0-9０-９,，.．]*\s*(円|ドル|ポイント|pt|%|％)"
-)
 
 
 def _plain_description(article):
